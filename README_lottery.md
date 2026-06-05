@@ -15,8 +15,12 @@ The script supports two random number backends:
    memory addresses, thread scheduling, network timing, performance
    counters, and the system CSPRNG.  Optionally augmented with mouse
    movements, keyboard presses, or hardware sensors.
+   
+   **Importatn notice:**
+   You need to download this file separately from the repo:
+   https://github.com/IgorBrzezek/trandom
 
-**Version:** 0.2
+**Version:** 0.5
 **Author:** igor.brzezek@gmail.com
 **Repository:** https://github.com/IgorBrzezek/lottery
 
@@ -46,9 +50,13 @@ The script supports two random number backends:
    numbers already drawn in the current partial round.  The script then
    stops — one final round with leftovers plus refill.
 
-6. Rounds continue until the `remaining` set is empty.
+6. Rounds continue until the `remaining` set is empty (one full pool cycle). With `--series N`, this full pool cycle is repeated N times, each starting from a fresh pool `[FROM, TO]`.  Between series a separator line is printed (yellow with `--color`).
 
-7. Numbers that have appeared in any previous round are marked as
+7. With `--fullpool`, the pool is never depleted. Each draw picks `n` numbers from the full range `[FROM, TO]` without removing them.  `--series N` determines the number of draws (default: 1).  This is useful for independent lottery simulations where all numbers are equally likely in every draw.
+
+8. With `--threads N`, the workload is split across N parallel threads, each with its own RNG.  Requires `--series`.  Repeat tracking is thread-local.  trandom is not supported in parallel mode (falls back to Python random).
+
+9. Numbers that have appeared in any previous round are marked as
    repeats.  With `--color` they appear in red; without `--color` they
    are prefixed with `*`.
 
@@ -62,9 +70,15 @@ The script supports two random number backends:
   be selected from `nums` such that every pair is at least `min_gap`
   apart.  If `min_gap <= 1`, every subset is valid.
 
+- `count_neighbor_runs(nums, m)` — Counts how many non-overlapping runs
+  of exactly `m` consecutive numbers appear in `nums`.  A run of length
+  `L` contributes `L // m` occurrences (e.g., `[1,2,3,4]` with `m=2`
+  counts as 2 pairs: `(1,2)` and `(3,4)`).
+
 When `--minlen` is set and `can_pick()` returns `False`, the constraint
-is relaxed and the script draws without checking adjacency — otherwise
-it might loop forever searching for a valid set that does not exist.
+is relaxed and the script draws without checking `minlen`/`noneighbor` —
+otherwise it might loop forever searching for a valid set that does not
+exist.  The `--nei` constraint is still enforced in that case.
 
 ---
 
@@ -99,14 +113,22 @@ No pip install is needed for the standard 7 entropy sources.
 ### Number Constraints
 
 | Option | Description |
-|---|---|
+|---|---|---|
 | `-nn`, `--noneighbor` | Prevent adjacent numbers (differing by 1) in any single draw |
 | `--minlen INT` | Minimum distance between any two drawn numbers in a single draw |
+| `--nei N,M` | Require exactly N runs of M consecutive numbers in each draw (e.g., `--nei 1,2` = one adjacent pair, `--nei 2,2` = two pairs, `--nei 1,3` = one triple) |
+| `--series N` | Repeat the entire drawing process N times. Each series starts with a fresh pool `[FROM, TO]` and runs until the pool is exhausted (with one refill round). A separator line with the series number is printed between series (yellow with `--color`). Without this flag, a single pool cycle is performed. |
+| `--fullpool` | Each draw uses the full range `[FROM, TO]` without removing numbers. `--series N` sets the number of draws (default: 1). Useful for independent lottery simulations. |
+| `-t N`, `--threads N` | Split work across N parallel threads (each with its own RNG). Requires `--series`. Repeat tracking is thread-local. Not compatible with `--rndauto`. |
+| `--seriesentropy` | Re-collect sensor entropy at each new series when using `--series`. Requires `--rndauto`. |
 | `--debug` | Show the remaining-number pool in brackets after each round |
 
 `--minlen` and `--noneighbor` can be used together.  If both are given,
 `--minlen` takes precedence over `--noneighbor` for setting the minimum
 gap, but both checks are applied.
+
+`--nei` is **mutually exclusive** with `--minlen`.  Using both will
+cause the script to exit with an error.
 
 ### Random Generator Selection
 
@@ -136,8 +158,15 @@ additional physical entropy.
 | Option | Description |
 |---|---|
 | `--color` | Enable ANSI colored output: new numbers in white, repeats in red. Without this flag, output is plain ASCII — repeats are marked with `*`. |
+| `--colorneighbor` | Highlight adjacent numbers in green (can be combined with `--color`; green takes priority over white/red) |
+| `--numbering cont|ext` | Round numbering: `cont` (continuous, default) or `ext` (continuous/series-round, e.g. `5/  1`) |
+| `--seriesentropy` | Re-collect sensor entropy at each new series when using `--series`. Requires `--rndauto`. |
 | `--debug` | Append the remaining-number pool in square brackets after each round. |
-| `-w FILENAME`, `--write FILENAME` | Write drawn numbers to CSV file (one round per line, comma-separated). Terminal output remains unchanged. |
+| `-w FILENAME`, `--write FILENAME` | Write drawn numbers to CSV file (one round per line, comma-separated; blank line between series). Terminal output remains unchanged. |
+| `--wcont` | With `-w`, write CSV continuously without blank line separators between series. |
+| `--nodisplay` | Suppress all terminal output (only valid with `-w`). Useful for batch/scripted runs. |
+| `--pb`, `--progressbar` | Show progress bar on stderr (requires `--nodisplay`). |
+| `-in FILE`, `--infile FILE` | Read and display a CSV file previously written with `-w`. With `--color`, numbers are colored as on screen. With `--colorneighbor`, adjacent numbers are highlighted. |
 
 ### Help
 
@@ -194,6 +223,15 @@ python lottery.py -a 1 -b 49 -n 6
 # Prevent adjacent numbers (differing by 1)
 python lottery.py -a 1 -b 49 -n 6 -nn
 
+# Require exactly one pair of adjacent numbers (e.g., 1,2 or 30,31)
+python lottery.py -a 1 -b 49 -n 6 --nei 1,2
+
+# Require exactly two pairs of adjacent numbers
+python lottery.py -a 1 -b 49 -n 6 --nei 2,2
+
+# Require exactly one triple of consecutive numbers (e.g., 5,6,7)
+python lottery.py -a 1 -b 49 -n 6 --nei 1,3
+
 # Minimum distance of 3 between any two drawn numbers
 python lottery.py -a 1 -b 49 -n 6 --minlen 3
 
@@ -218,6 +256,12 @@ python lottery.py -a 1 -b 49 -n 6 --rndauto --mouse --sensors
 # Enable colored output
 python lottery.py -a 1 -b 49 -n 6 --color
 
+# Highlight adjacent numbers in green
+python lottery.py -a 1 -b 49 -n 6 --colorneighbor
+
+# Combine both: neighbors in green, repeats in red
+python lottery.py -a 1 -b 49 -n 6 --color --colorneighbor
+
 # Write results to CSV file
 python lottery.py -a 1 -b 49 -n 6 -w results.csv
 
@@ -230,11 +274,38 @@ python lottery.py -a 1 -b 49 -n 6 --debug
 # Draw 10 numbers from 1 to 100 with --minlen 5
 python lottery.py -a 1 -b 100 -n 10 --minlen 5
 
+# Repeat the full drawing cycle 3 times (fresh pool each time)
+python lottery.py -a 1 -b 49 -n 6 --series 3
+
+# Independent draws from the full pool (5 draws, each from [1..49])
+python lottery.py -a 1 -b 49 -n 6 --fullpool --series 5
+
+# Single draw from the full pool (--fullpool without --series = 1 draw)
+python lottery.py -a 1 -b 49 -n 6 --fullpool
+
+# Fullpool with neighbor constraint and color
+python lottery.py -a 1 -b 49 -n 6 --fullpool --series 10 --nei 1,2 --color
+
+# Repeat 20 times with sensor entropy collected at each new series
+python lottery.py -a 1 -b 49 -n 6 --series 20 --rndauto --sensors --seriesentropy
+
+# Combine --series with --nei
+python lottery.py -a 1 -b 49 -n 6 --series 5 --nei 1,2
+
 # Edge case: n equals the range size — only one draw consumes everything
 python lottery.py -a 1 -b 6 -n 6
 
 # Edge case: n larger than the range
 python lottery.py -a 1 -b 10 -n 12
+
+# Parallel execution: 100 series across 4 threads
+python lottery.py -a 1 -b 49 -n 6 --series 100 --threads 4
+
+# Parallel execution with fullpool (6 independent draws, 3 threads)
+python lottery.py -a 1 -b 49 -n 6 --fullpool --series 6 --threads 3 --color
+
+# Parallel execution with nei constraint
+python lottery.py -a 1 -b 49 -n 6 --series 50 --threads 5 --nei 1,2
 ```
 
 ---
@@ -337,7 +408,7 @@ readings (hardcoded in `trandom.py`).
 
 ---
 
-## Comparison of RNG Modes
+## Comparison of RND Modes
 
 | Mode | Generator | Entropy Sources | Interactive? | Deterministic? |
 |---|---|---|---|---|
@@ -368,3 +439,61 @@ readings (hardcoded in `trandom.py`).
   `colorama` package is imported if available but is not required.
 - The script is a single file with no required external dependencies on
   Windows.
+
+## My Examples
+- For one series:
+python lottery.py -a 1 -b 49 -n 6  --rndauto --mouse --sensors --samples 512 --color -w result.csv --colorneighbor
+
+Result on screen:
+
+[*] Move your mouse around to collect entropy
+[*] Collecting mouse entropy (timeout: unlimited, target: 512 samples)
+    Move your mouse around now!
+
+Mouse entropy  100.0% [##############################]  512/512
+[+] Collected 512 mouse entropy samples
+[*] Reading hardware sensors (CPU temp, fans, voltages, battery)
+Sensor entropy  100.0% [##############################]  5/5
+[+] Collected 5 sensor entropy samples
+  1: 28  7 27 25 43 36
+  2: 37 44 42 14 20 46
+  3:  2  4 23 12 31 47
+  4:  3 30 13 33 39 32
+  5: 49 48 10 15 41 16
+  6: 26 38 29  1 40 21
+  7: 22 19 45 17 34  6
+  8:  9 11  5 35 24  8
+  9: 18 25 46 42 41 21
+
+- For 100 series:
+python lottery.py -a 1 -b 49 -n 6  --rndauto --mouse --sensors --samples 512 --color --series 100 -w result.csv --colorneighbor --seriesentropy --numbering ext
+
+Result on screen:
+
+...
+
+--- Generating new series (series 99/100) ---
+Sensor entropy  100.0% [##############################]  5/5
+
+883/1: 24 15 27 49  9 33
+884/2: 21 22 36 26 42 37
+885/3: 34  8  3 11  7 30
+886/4: 32 38 47 20  4 41
+887/5: 17 28 43 40 23 12
+888/6: 29 16 25  5 10 19
+889/7: 31 39  2 44 14  1
+890/8: 35 18 46  6 48 45
+891/9: 13  8 10 11 28 34
+
+--- Generating new series (series 100/100) ---
+Sensor entropy  100.0% [##############################]  5/5
+
+892/1: 34  7 28 48 39  2
+893/2: 11 41  8 47 45 33
+894/3: 30 42 38 15 22 20
+895/4: 19 18 44 27 32 26
+896/5: 14 31 40  6 29 43
+897/6: 25  9 24 46 21 17
+898/7:  3 35  1 16 13 23
+899/8:  5 49  4 36 37 12
+900/9: 10 11 42 41 35 47
