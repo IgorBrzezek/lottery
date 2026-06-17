@@ -3,7 +3,7 @@ import argparse
 import csv
 import sys
 
-VERSION = 0.1
+VERSION = 0.2
 AUTHOR = "igor.brzezek@gmail.com"
 GITHUB = "https://github.com/IgorBrzezek/lottery_compare"
 
@@ -43,37 +43,40 @@ class _CustomHelpAction(argparse.Action):
             print('''\
 
 EXAMPLES:
-  python lottery_compare.py -a lotto.csv -b moje.csv
+  python lottery_compare.py -a lotto.csv -b mydata.csv
       Compare one draw against tickets in a single set.
 
-  python lottery_compare.py -a lotto.csv -b moje.csv --setb all --stat
+  python lottery_compare.py --mynumbers 1,2,3,4,5,6 -b mydata.csv
+      Compare given numbers against tickets in a single set.
+
+  python lottery_compare.py -a lotto.csv -b mydata.csv --setb all --stat
       Compare against all ticket sets and show per-set statistics.
 
   python lottery_compare.py -a lotto.csv -b lotto2.csv --setb 2,3 --rownumbers
       Compare against sets 2 and 3, showing row numbers for tickets.
 
-  python lottery_compare.py -a lotto.csv -b moje.csv --mono
+  python lottery_compare.py -a lotto.csv -b mydata.csv --mono
       Plain ASCII output without ANSI color codes.
 
-  python lottery_compare.py -a lotto.csv -b moje.csv --summaryonly
+  python lottery_compare.py -a lotto.csv -b mydata.csv --summaryonly
       Skip per-set display, show only the combined overall hits summary.
 
-  python lottery_compare.py -a result1000_a.csv -b moje.csv --ppcolor
+  python lottery_compare.py -a result1000_a.csv -b mydata.csv --ppcolor
       Color the "SET" label and set number in multi-set separators.
 
-  python lottery_compare.py -a lotto.csv -b moje.csv --showdata
+  python lottery_compare.py -a lotto.csv -b mydata.csv --showdata
       Show full data rows from file B with their line numbers.
 
-  python lottery_compare.py -a lotto.csv -b moje.csv --summary
+  python lottery_compare.py -a lotto.csv -b mydata.csv --summary
       Show the number of data lines (non-empty, non-comment) in both files.
 
-  python lottery_compare.py -a result1000_a.csv -b moje.csv --colsa 3-8
+  python lottery_compare.py -a result1000_a.csv -b mydata.csv --colsa 3-8
       Use only columns 3-8 from file A as the drawn numbers.
 
   python lottery_compare.py -a lotto.csv -b result1000_a.csv --colsb 2-7
       Use only columns 2-7 from file B as ticket numbers.
 
-  python lottery_compare.py -a result1000_a.csv -b moje.csv --displcolsa 1-6
+  python lottery_compare.py -a result1000_a.csv -b mydata.csv --displcolsa 1-6
       Display only columns 1-6 from file A (calculation still uses all columns).
 
   python lottery_compare.py -a lotto.csv -b result1000_a.csv --colsb 2-7 --displaycolsb 1,3,5,7
@@ -121,7 +124,7 @@ NOTES:
             print(f'lottery_compare.py v{VERSION}')
             print(f'Author: {AUTHOR}')
             print()
-            print('Usage: lottery_compare.py -a FILE -b FILE [--seta SETA] [--setb LIST] [--stat] [--mono] [--ppcolor] [--rownumbers] [--summaryonly] [--showdata] [--summary] [--colsa COLS] [--colsb COLS] [--displcolsa COLS] [--displaycolsb COLS]')
+            print('Usage: lottery_compare.py (-a FILE | --mynumbers NUMBERS) -b FILE [--seta SETA] [--setb LIST] [--stat] [--mono] [--ppcolor] [--rownumbers] [--summaryonly] [--showdata] [--summary] [--colsa COLS] [--colsb COLS] [--displcolsa COLS] [--displaycolsb COLS]')
             print()
             print('Use --help for extended help with examples.')
         parser.exit()
@@ -164,7 +167,8 @@ def main():
                         help='show this simple help message and exit')
     parser.add_argument('--help', action=_CustomHelpAction, extended=True,
                         help='show extended help message with examples and exit')
-    parser.add_argument('-a', required=True, help='file with drawn numbers (CSV)')
+    parser.add_argument('-a', required=False, help='file with drawn numbers (CSV)')
+    parser.add_argument('--mynumbers', type=str, help='comma-separated numbers to check (alternative to -a)')
     parser.add_argument('-b', required=True, help='file with ticket numbers; empty line = new set (CSV)')
     parser.add_argument('--seta', type=int, default=1, help='row in -a to analyze (1-based, default: 1)')
     parser.add_argument('--setb', type=parse_setb, default=[1], help='set(s) in -b: comma-separated numbers or "all" (default: 1)')
@@ -180,6 +184,10 @@ def main():
     parser.add_argument('--displaycolsb', type=str, help='columns from file B to display only (1-based, comma-separated, e.g. "2-7" or "all")')
     parser.add_argument('--summary', action='store_true', help='show data line counts for both input files')
     args = parser.parse_args()
+    if args.a is None and args.mynumbers is None:
+        sys.exit("Either -a or --mynumbers must be provided")
+    if args.a is not None and args.mynumbers is not None:
+        sys.exit("-a and --mynumbers are mutually exclusive")
 
     G = '' if args.mono else GRAY
     W = '' if args.mono else WHITE
@@ -197,42 +205,50 @@ def main():
     displcolsa = parse_cols(args.displcolsa)
     displaycolsb = parse_cols(args.displaycolsb)
 
-    with open(args.a, encoding="utf-8") as f:
-        reader = csv.reader(f)
-        count = 0
-        ref_row = None
-        for row in reader:
-            if not row or row[0].lstrip().startswith('#'):
-                continue
-            count += 1
-            if count == args.seta:
-                ref_row = row
-                break
-        if ref_row is None:
-            sys.exit(f"File {args.a} has fewer than {args.seta} data row(s)")
-        if colsa:
-            try:
-                ref = [int(ref_row[i].strip()) for i in colsa if i < len(ref_row)]
-            except ValueError:
-                sys.exit(f"Non-numeric value in file A row {args.seta}, selected column(s)")
-        else:
-            try:
-                ref = [int(x.strip()) for x in ref_row]
-            except ValueError:
-                sys.exit(f"Non-numeric value in file A row {args.seta}")
-
-    ref_set = set(ref)
-    if displcolsa:
-        displ_ref = []
-        for i in displcolsa:
-            if i < len(ref_row):
-                v = ref_row[i].strip()
-                try:
-                    displ_ref.append(int(v))
-                except ValueError:
-                    displ_ref.append(v)
-    else:
+    if args.mynumbers is not None:
+        try:
+            ref = [int(x.strip()) for x in args.mynumbers.split(',')]
+        except ValueError:
+            sys.exit("Non-numeric value in --mynumbers")
+        ref_set = set(ref)
         displ_ref = ref
+    else:
+        with open(args.a, encoding="utf-8") as f:
+            reader = csv.reader(f)
+            count = 0
+            ref_row = None
+            for row in reader:
+                if not row or row[0].lstrip().startswith('#'):
+                    continue
+                count += 1
+                if count == args.seta:
+                    ref_row = row
+                    break
+            if ref_row is None:
+                sys.exit(f"File {args.a} has fewer than {args.seta} data row(s)")
+            if colsa:
+                try:
+                    ref = [int(ref_row[i].strip()) for i in colsa if i < len(ref_row)]
+                except ValueError:
+                    sys.exit(f"Non-numeric value in file A row {args.seta}, selected column(s)")
+            else:
+                try:
+                    ref = [int(x.strip()) for x in ref_row]
+                except ValueError:
+                    sys.exit(f"Non-numeric value in file A row {args.seta}")
+
+        ref_set = set(ref)
+        if displcolsa:
+            displ_ref = []
+            for i in displcolsa:
+                if i < len(ref_row):
+                    v = ref_row[i].strip()
+                    try:
+                        displ_ref.append(int(v))
+                    except ValueError:
+                        displ_ref.append(v)
+        else:
+            displ_ref = ref
     left = ' '.join(f'{n:3d}' if isinstance(n, int) else n for n in displ_ref)
     left_width = len(left)
 
@@ -440,11 +456,13 @@ def main():
         print('=' * sep_width)
 
     if args.summary:
-        try:
-            with open(args.a, encoding="utf-8") as f:
-                count_a = sum(1 for row in csv.reader(f) if row)
-        except FileNotFoundError:
-            sys.exit(f"File not found: {args.a}")
+        if args.a:
+            count_a = 0
+            try:
+                with open(args.a, encoding="utf-8") as f:
+                    count_a = sum(1 for row in csv.reader(f) if row)
+            except FileNotFoundError:
+                sys.exit(f"File not found: {args.a}")
         try:
             with open(args.b, encoding="utf-8") as f:
                 count_b = sum(
@@ -453,7 +471,8 @@ def main():
                 )
         except FileNotFoundError:
             sys.exit(f"File not found: {args.b}")
-        print(f'File "{args.a}": {count_a} data line(s)')
+        if args.a:
+            print(f'File "{args.a}": {count_a} data line(s)')
         print(f'File "{args.b}": {count_b} data line(s)')
 
 

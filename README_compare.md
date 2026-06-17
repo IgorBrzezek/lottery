@@ -30,6 +30,9 @@ Compare a single lottery draw row against multiple ticket rows from separate CSV
 # Compare a draw against a single ticket set
 python lottery_compare.py -a lotto.csv -b moje.csv
 
+# Compare given numbers against tickets
+python lottery_compare.py --mynumbers 1,2,3,4,5,6 -b moje.csv
+
 # Compare against all ticket sets with statistics
 python lottery_compare.py -a lotto.csv -b moje.csv --setb all --stat
 
@@ -74,6 +77,7 @@ Use `--setb` to select which set(s) to compare (by number, comma-separated, or `
 - A CSV file containing one or more rows of drawn numbers.
 - Use `--seta` to select which row to analyze (1-based, default: 1).
 - All columns are treated as drawn numbers, or use `--colsa` to select specific columns.
+- Instead of `-a`, you can use `--mynumbers` to supply draw numbers directly on the command line.
 - Example (`lotto.csv`): `05,10,15,20,25,30`
 
 ### File B (`-b`)
@@ -98,7 +102,8 @@ Use `--setb` to select which set(s) to compare (by number, comma-separated, or `
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `-a` | string | **required** | File with drawn numbers (CSV). |
+| `-a` | string | — | File with drawn numbers (CSV). Alternative to `--mynumbers`. |
+| `--mynumbers` | string | — | Comma-separated numbers to check (e.g. `1,2,3,4,5,6`). Alternative to `-a`. |
 | `-b` | string | **required** | File with ticket numbers; empty line separates sets (CSV). |
 | `--seta` | int | `1` | Row in `-a` to analyze (1-based). |
 | `--setb` | string | `1` | Set(s) in `-b`: comma-separated list of 1-based numbers or `"all"`. |
@@ -126,6 +131,12 @@ By default, `--setb 1` — the first set in file B is compared:
 
 ```bash
 python lottery_compare.py -a lotto.csv -b moje.csv
+```
+
+You can also supply the draw numbers directly instead of using `-a`:
+
+```bash
+python lottery_compare.py --mynumbers 1,2,3,4,5,6 -b moje.csv
 ```
 
 Output:
@@ -382,7 +393,15 @@ python lottery_compare.py -a result1000_a.csv -b moje.csv --displcolsa 1-6
 
 Display only columns 1-6 from the draw file; matching still uses all columns.
 
-### Example 12: Show data line summary
+### Example 12: Compare from command line
+
+```bash
+python lottery_compare.py --mynumbers 1,2,3,4,5,6 -b moje.csv
+```
+
+Supply draw numbers directly on the command line instead of from a CSV file.
+
+### Example 13: Show data line summary
 
 ```bash
 python lottery_compare.py -a lotto.csv -b moje.csv --summary
