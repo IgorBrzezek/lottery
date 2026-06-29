@@ -11,7 +11,7 @@ import argparse
 import sys
 import os
 
-VERSION = 0.5
+VERSION = 0.5 
 AUTHOR = "igor.brzezek@gmail.com"
 GITHUB = "https://github.com/IgorBrzezek/lottery"
 
