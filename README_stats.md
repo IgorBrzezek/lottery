@@ -2,14 +2,17 @@
 
 A Python tool for analyzing lottery draw statistics from CSV files. It calculates the percentage share of each number across all draws and presents the results as text or a horizontal histogram.
 
-**Supports 5 analysis modes:**
+**Supports 10 analysis modes:**
 - `-num N` — statistics for one or more specific numbers
 - `--auto` — histogram for all numbers 1–49
 - `--mostfreq N` — ranked list of the N most frequent numbers
 - `--neighbors` — display rows with consecutive numbers highlighted
-- `--neighborstats` — statistics for consecutive number pairs (1-2, 2-3, ...), sorted by pair value
+- `--notneighbors` — display only rows **without** consecutive numbers
+- `--neighbor2` / `--neighbor3` / `--neighbor4` — display only rows containing exactly 2, 3 or 4 consecutive numbers
+- `--neighborstats` — horizontal histogram of rows by the number of consecutive numbers (2–6)
+- `--pairstats` — statistics for consecutive number pairs (1-2, 2-3, ...), sorted by pair value
 
-**Version:** 0.3
+**Version:** 0.7
 **Author:** igor.brzezek@gmail.com
 **Repository:** https://github.com/IgorBrzezek/lottery_stats
 
@@ -70,7 +73,12 @@ You must specify exactly one mode:
 | `--auto` | Display a histogram of percentage shares for numbers 1–49 |
 | `--mostfreq N` | Show the N most frequent numbers with a ranked list |
 | `--neighbors` | Show all rows, with consecutive numbers highlighted in green |
-| `--neighborstats` | Statistics for consecutive number pairs (1-2, 2-3, ... 48-49), sorted by pair value |
+| `--notneighbors` | Show only rows that contain no consecutive numbers |
+| `--neighbor2` | Show only rows with exactly 2 consecutive numbers |
+| `--neighbor3` | Show only rows with exactly 3 consecutive numbers |
+| `--neighbor4` | Show only rows with exactly 4 consecutive numbers |
+| `--neighborstats` | Horizontal histogram of rows by the number of consecutive numbers (2–6) |
+| `--pairstats` | Statistics for consecutive number pairs (1-2, 2-3, ... 48-49), sorted by pair value |
 
 ### General options
 
@@ -81,6 +89,7 @@ You must specify exactly one mode:
 | `--color` | Enable ANSI colored output |
 | `--nncolor` | Highlight rows without neighbors in yellow |
 | `--nosort` | Display numbers in original CSV order (do not sort) |
+| `--stats` | Print a summary of the performed operation (rows read, rows matching the condition, percentage share) |
 | `--format FORMAT` | Column layout: `lotto` (default) or `cols col1,col2,...` |
 | `--datemin DD.MM.YYYY` | Include draws on or after this date (lotto format only) |
 | `--datemax DD.MM.YYYY` | Include draws on or before this date (lotto format only) |
@@ -193,11 +202,87 @@ Output (plain):
 
 With `--color` consecutive pairs are highlighted in green. With `--nncolor` rows without any consecutive pairs are shown entirely in yellow. With `--nosort` numbers are displayed in their original order from the CSV instead of sorted ascending.
 
-**Statistics for consecutive number pairs (sorted by pair value):**
+**Rows without neighboring numbers:**
+
+```bash
+python lottery_stats.py -in lotto.csv --notneighbors
+python lottery_stats.py -in lotto.csv --notneighbors --nncolor
+python lottery_stats.py -in lotto.csv --notneighbors --nosort
+python lottery_stats.py -in lotto.csv --notneighbors --datemin 01.01.1957 --datemax 31.12.1957
+```
+
+Output:
+
+```
+0001 27.01.1957: 8, 12, 31, 39, 43, 45
+0004 17.02.1957: 2, 11, 14, 37, 40, 45
+0005 24.02.1957: 8, 10, 15, 35, 39, 49
+...
+```
+
+`--notneighbors` is the counterpart of `--neighbors`: it prints only the rows in which no two drawn numbers are consecutive. The same modifiers apply as with `--neighbors` — `--nncolor` prints the remaining rows in yellow, `--nosort` keeps the original CSV order, and `--datemin` / `--datemax` limit the scanned range. If no qualifying row exists, the script prints `No rows without consecutive numbers found`.
+
+**Rows with exactly 2, 3 or 4 consecutive numbers:**
+
+```bash
+python lottery_stats.py -in lotto.csv --neighbor2
+python lottery_stats.py -in lotto.csv --neighbor3
+python lottery_stats.py -in lotto.csv --neighbor4
+python lottery_stats.py -in lotto.csv --neighbor2 --color
+python lottery_stats.py -in lotto.csv --neighbor2 --stats
+python lottery_stats.py -in lotto.csv --neighbor3 --datemin 01.01.2000
+```
+
+Output (`--neighbor2`, first rows):
+
+```
+0002 03.02.1957: 5, 10, 11, 22, 25, 27
+0012 14.04.1957: 2, 4, 31, 38, 39, 46
+0017 26.05.1957: 16, 24, 25, 29, 32, 36
+```
+
+These three modes print only the rows in which the number of consecutive numbers matches the option exactly. A number counts as consecutive if it belongs to a run of at least two consecutive values, and runs are summed together:
+
+| Option | Matches | Example row |
+|--------|---------|-------------|
+| `--neighbor2` | exactly 2 consecutive numbers | `5, 10, 11, 22, 25, 27` (one pair: 10-11) |
+| `--neighbor3` | exactly 3 consecutive numbers | `18, 19, 20, 26, 45, 49` (one run of three) |
+| `--neighbor4` | exactly 4 consecutive numbers | `1, 15, 16, 19, 47, 48` (two pairs: 15-16 and 47-48) |
+| — | not matched by any of them | `1, 15, 16, 17, 47, 48` (a run of three plus a pair — 5 consecutive numbers) |
+
+The same modifiers apply as with `--neighbors`: `--color` highlights the consecutive numbers in green, `--nosort` keeps the original CSV order, and `--datemin` / `--datemax` limit the scanned range. If no qualifying row exists, the script prints `No rows with exactly N consecutive number(s) found`.
+
+**Histogram of rows by number of consecutive numbers:**
 
 ```bash
 python lottery_stats.py -in lotto.csv --neighborstats
 python lottery_stats.py -in lotto.csv --neighborstats --color
+python lottery_stats.py -in lotto.csv --neighborstats --stats
+python lottery_stats.py -in lotto.csv --neighborstats --datemin 01.01.2000
+```
+
+Output:
+
+```
+  Rows by number of consecutive numbers:
+
+100.00% ######################################## All rows                   7358
+ 38.99% ################                         2 consecutive numbers      2869
+  3.98% ##                                       3 consecutive numbers       293
+  6.05% ##                                       4 consecutive numbers       445
+  0.76%                                          5 consecutive numbers        56
+  0.16%                                          6 consecutive numbers        12
+
+  Consecutive numbers are drawn values differing by 1; rows with fewer than 2 are listed under 'All rows' only.
+```
+
+The first column holds the percentage of all analyzed rows, followed by a horizontal bar, the label and the raw row count. Percentages are always relative to `All rows`, and `-acc` controls their precision. Rows with no consecutive numbers are not listed separately — they are only part of the `All rows` total. If a file holds more columns than a Lotto draw (`--format cols ...`), an extra `>6 consecutive numbers` line appears when such rows exist.
+
+**Statistics for consecutive number pairs (sorted by pair value):**
+
+```bash
+python lottery_stats.py -in lotto.csv --pairstats
+python lottery_stats.py -in lotto.csv --pairstats --color
 ```
 
 Output (pairs sorted by value, not frequency):
@@ -266,7 +351,44 @@ python lottery_stats.py -in numbers.csv -num 5,8,13 --format "cols 1"
    (count of the number ÷ total count of all drawn numbers) × 100
    ```
 
-4. The result is displayed according to the selected mode (`-num`, `--auto`, `--mostfreq`, `--neighbors`, or `--neighborstats`).
+4. The result is displayed according to the selected mode (`-num`, `--auto`, `--mostfreq`, `--neighbors`, `--notneighbors`, `--neighbor2`/`3`/`4`, `--neighborstats`, or `--pairstats`).
+5. Adding `--stats` appends a summary of the operation (see below).
+
+## Operation statistics (`--stats`)
+
+`--stats` is a modifier that can be combined with any mode. After the normal output it prints how many rows were read, how many were analyzed, how many matched the condition of the selected mode and what percentage that is:
+
+```bash
+python lottery_stats.py -in lotto.csv --notneighbors --stats
+python lottery_stats.py -in lotto.csv --notneighbors --stats --datemax 31.12.1957
+python lottery_stats.py -in lotto.csv --neighborstats --stats
+python lottery_stats.py -in lotto.csv --pairstats --stats
+python lottery_stats.py -in lotto.csv -num 7,12 --stats
+```
+
+Output (`--notneighbors` limited to 1957):
+
+```
+  Operation statistics (--notneighbors)
+
+  Rows in file:               7371
+  Rows skipped:              7324 (99.36% of 7371 all rows)
+  Rows analyzed:                47
+  Rows without neighbors:       33 (70.21% of 47 analyzed rows)
+  Rows displayed:               33 (70.21% of 47 analyzed rows)
+```
+
+| Mode | Reported "condition" rows |
+|------|---------------------------|
+| `--neighbors` | Rows containing at least one consecutive pair (and the number of printed rows) |
+| `--neighbor2` / `--neighbor3` / `--neighbor4` | Rows with exactly 2, 3 or 4 consecutive numbers (and the number of printed rows) |
+| `--notneighbors` | Rows without any consecutive pair (and the number of printed rows) |
+| `--neighborstats` | Rows containing at least one consecutive pair (the histogram itself is printed by the mode) |
+| `--pairstats` | Rows containing at least one consecutive pair, plus the number of distinct pairs found |
+| `-num N[,M,...]` | Draws in which each of the given numbers appeared (percentage of all draws) |
+| `--auto`, `--mostfreq N` | Number of numbers displayed |
+
+`Rows skipped` counts rows dropped before analysis — malformed rows, rows shorter than the selected column layout, or rows outside the `--datemin` / `--datemax` range. Percentages are relative to the base shown next to them, so `--datemin` / `--datemax` filtering does not distort the share of matching rows. The `-acc` option controls the number of decimal places in these percentages as well.
 
 ## Windows color support
 
